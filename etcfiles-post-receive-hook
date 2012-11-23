@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# The "post-receive" script is run after receive-pack has accepted a pack
+# and the repository has been updated.  It is passed arguments in through
+# stdin in the form
+#  <oldrev> <newrev> <refname>
+# For example:
+#  aa453216d1b3e49e7f6f98441fa56946ddcd6a20 68f7abf4e6f922807889f52bc043ecd31b79f814 refs/heads/master
+
+export TERM=xterm # git sets TERM to 'dumb'
+
+etcfilesHome=$(dirname "$(readlink "$0")")
+
+cd "$GIT_DIR/hooks"
+
+source "$etcfilesHome/lib/modules.sh"
+require-module interaction
+require-module files
+
+info-message "Running $0"
+
+newEdits=false
+
+while read oldrev newrev refname; do
+    test "$refname" = "refs/heads/edits" && newEdits=true
+done
+
+unset GIT_DIR # avoid having this during execution of etcfiles-merge-edits
+
+$newEdits && $etcfilesHome/etcfiles-merge-edits
+
+info-message "End of $0"

@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# TODO: do all this exclusively with git plumbing commands.
+
+source "$(dirname "$0")/lib/modules.sh"
+require-module interaction
+require-module files
+require-module git
+
+if [  $# -eq 0 ]; then
+    info-message "No files given."
+    exit 0
+fi
+
+function relativise-etcfile {
+    file="$1"; shift
+    remaining-args "$@"
+    [[ $(realpath "$file") =~ ^/etc/(.+) ]] || \
+        error-message "'$file' does not reside in /etc."
+    echo "${BASH_REMATCH[1]}"
+}
+
+declare -a files
+for (( i = 1 ; $# > 0 ; i++ )); do
+    files[$i]=$(relativise-etcfile "$1")
+    test $? -eq 0 || exit $? # exit if error from relativise-etcfile
+    shift
+done
+set -- "${files[@]}" # set relative positional paramaters
+unset files
+
+cd /etc
+
+git-is-repo -f
+git-is-current-branch -f master
+
+function move-to-branch {
+    branch="$1"; shift
+    remaining-args "$@"
+    # Check existence of branch, and create if inexistent.
+    if git show-ref --heads "refs/heads/$branch" > /dev/null; then
+        git symbolic-ref HEAD "refs/heads/$branch" && \
+        git reset --quiet
+    else
+        git checkout --orphan "$branch"
+    fi
+}
+
+trap "move-to-branch master" EXIT
+
+# Add files to edits branch.
+if move-to-branch edits; then
+    if git add "$@"; then
+        # Commit without invoking hooks.
+        if ! git commit --no-verify --edit --untracked-files=no \
+            --message="Added $*."
+        then
+            git reset "$@"
+            exit 1
+        fi
+    fi
+fi
+
+# Add files to master branch.
+if move-to-branch master; then
+    if git add "$@"; then
+        if ! git commit -C $(git rev-parse --verify refs/heads/edits); then
+            git reset "$@"
+            exit 1
+        fi
+    fi
+fi
+
+info-message "You can now pull the edits in your admin client."

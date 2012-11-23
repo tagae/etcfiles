@@ -1,0 +1,14 @@
+#!/bin/bash
+
+source "$(dirname "$0")/lib/modules.sh"
+require-module interaction
+require-module git
+
+cd /etc
+
+git-is-repo -f
+git-is-current-branch -f master
+
+git merge --strategy recursive -Xtheirs --squash edits && \
+    git commit --reuse-message edits --untracked-files=no && \
+        success-message "Merged configuration from 'edits' branch."
